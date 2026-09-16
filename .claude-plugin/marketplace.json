@@ -1,0 +1,13 @@
+{
+  "name": "code-guard-marketplace",
+  "owner": {
+    "name": "Mansi Gupta"
+  },
+  "plugins": [
+    {
+      "name": "code-guard",
+      "source": "./",
+      "description": "Auto syntax check + safety/format review for .py/.js/.ts/.java/.go files"
+    }
+  ]
+}
