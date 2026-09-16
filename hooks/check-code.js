@@ -34,7 +34,7 @@ function resolveProposed() {
   // Manual/skill invocation: node check-code.js <file> [--fix]
   if (process.argv[2] && process.argv[2] !== '--fix') {
     const p = process.argv[2];
-    return { filePath: p, content: fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '' };
+    return { filePath: p, content: fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '', mode: 'existing' };
   }
 
   let raw;
@@ -58,7 +58,7 @@ function resolveProposed() {
   const filePath = input.file_path;
 
   if (toolName === 'Write') {
-    return { filePath, content: input.content ?? '' };
+    return { filePath, content: input.content ?? '', mode: 'proposed' };
   }
 
   if (toolName === 'Edit') {
@@ -76,7 +76,7 @@ function resolveProposed() {
       process.exit(2);
     }
     const proposed = oldStr ? current.replace(oldStr, newStr) : current;
-    return { filePath, content: proposed };
+    return { filePath, content: proposed, mode: 'proposed' };
   }
 
   return null;
@@ -132,7 +132,8 @@ if (!fixMode) {
     syntaxCheckProposed(ext, content);
   } catch (err) {
     const out = (err.stdout || err.stderr || err.message || '').toString();
-    console.error(`SYNTAX ERROR (proposed change to ${filePath}):\n${out}`);
+    const label = resolved.mode === 'proposed' ? `proposed change to ${filePath}` : filePath;
+    console.error(`SYNTAX ERROR (${label}):\n${out}`);
     process.exit(2);
   }
 }
@@ -140,15 +141,9 @@ if (!fixMode) {
 const lines = content.split(/\r?\n/);
 const isBig = lines.length > MAX_LINES;
 
-// ---- 3. Mode split ----------------------------------------------------
-
-if (fixMode) {
-  runFixMode(filePath, content, lines);
-} else if (isBig && apiKey) {
-  checkWithGemini(filePath, content, lines.length, apiKey);
-} else {
-  checkLocally(filePath, lines, isBig);
-}
+// (Mode-split execution moved to the end of the file — see bottom —
+// so it runs only after every function/const it depends on, including
+// CHECK_SYSTEM_INSTRUCTION, has actually been defined.)
 
 // ---- Shared: find every dangerous line ------------------------------------
 
@@ -164,12 +159,13 @@ function findAllDangerousLines(lines) {
 
 // ---- Local path (small files, or big files with no Gemini key) -----------
 
-function checkLocally(filePath, lines, isBig, fallbackReason) {
+function checkLocally(filePath, lines, isBig, fallbackReason, mode) {
   const found = findAllDangerousLines(lines);
+  const label = mode === 'proposed' ? `proposed change to ${filePath}` : filePath;
 
   if (found.length > 0) {
     for (const f of found) {
-      console.error(`BLOCKED: dangerous pattern "${f.label}" found in proposed change to ${filePath} at line ${f.idx + 1} [verified: exact regex match; full original line = ${JSON.stringify(lines[f.idx])}]`);
+      console.error(`BLOCKED: dangerous pattern "${f.label}" found in ${label} at line ${f.idx + 1} [verified: exact regex match; full original line = ${JSON.stringify(lines[f.idx])}]`);
     }
     if (isBig) {
       const reason = fallbackReason || 'no GEMINI_API_KEY set';
@@ -227,7 +223,7 @@ function buildCheckMessage(content) {
   return `File content, one line number per line:\n${numbered.slice(0, 30000)}`;
 }
 
-function checkWithGemini(filePath, content, lineCount, apiKey) {
+function checkWithGemini(filePath, content, lineCount, apiKey, mode) {
   const message = buildCheckMessage(content);
   const body = JSON.stringify({
     system_instruction: { parts: [{ text: CHECK_SYSTEM_INSTRUCTION }] },
@@ -238,7 +234,7 @@ function checkWithGemini(filePath, content, lineCount, apiKey) {
   const respond = (err, reply) => {
     if (err) {
       console.log(`Gemini check failed (${err.message}). Falling back to local check.`);
-      checkLocally(filePath, content.split(/\r?\n/), true, err.message);
+      checkLocally(filePath, content.split(/\r?\n/), true, err.message, mode);
       return;
     }
     parseAndReport(filePath, lineCount, reply, content.split(/\r?\n/));
@@ -334,4 +330,15 @@ function parseAndReport(filePath, lineCount, reply, fileLines) {
 
   console.error(`BLOCKED: Gemini's reply for ${filePath} didn't match the expected format. Treating as unverified — review manually.`);
   process.exit(2);
+}
+
+// ---- Actually run the check — placed last, after every function and
+// constant above (including CHECK_SYSTEM_INSTRUCTION) has been defined. ----
+
+if (fixMode) {
+  runFixMode(filePath, content, lines);
+} else if (isBig && apiKey) {
+  checkWithGemini(filePath, content, lines.length, apiKey, resolved.mode);
+} else {
+  checkLocally(filePath, lines, isBig, undefined, resolved.mode);
 }
