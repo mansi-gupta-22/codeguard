@@ -1,6 +1,6 @@
 {
   "name": "code-guard",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Auto syntax check (always local) + safety/format review for .py/.js/.ts/.java/.go files...",
   "author": {
     "name": "Mansi Gupta"
