@@ -1,7 +1,7 @@
 {
   "name": "code-guard",
   "version": "0.9.1",
-  "description": "Auto syntax check (always local) + safety/format review for .py/.js/.ts/.java/.go files...",
+  "description": "Auto syntax check (always local) + safety/format review for .py/.js/.ts/.java/.go files. PreToolUse-based: checks proposed Write/Edit content before it's written, so blocking actually prevents unsafe code from being saved. Gemini's only role: reading and reporting on big files (>300 lines) during check mode. Fixing is always Claude's job.",
   "author": {
     "name": "Mansi Gupta"
   }
